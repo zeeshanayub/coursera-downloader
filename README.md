@@ -1,5 +1,10 @@
 # Coursera Downloader (`coursera_dl.py`)
 
+![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+![Video](https://img.shields.io/badge/video-yt--dlp-red.svg)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)
+
 Downloads **videos + subtitles + readings + labs** from a Coursera course you are
 **enrolled in**, for personal offline study. Built and verified against the live
 Coursera API using the IBM course *Develop Generative AI Applications: Get Started*.
