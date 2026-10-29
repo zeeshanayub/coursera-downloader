@@ -1,0 +1,29 @@
+# --- secrets: NEVER commit your session cookie ---
+cauth.txt
+*.cauth
+.env
+.env.*
+
+# --- python ---
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# --- downloaded course content (don't publish copyrighted material) ---
+coursera/
+downloads/
+*.part
+*.mp4
+*.webm
+*.vtt
+*.srt
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
