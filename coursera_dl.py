@@ -121,6 +121,30 @@ class Coursera:
             raise RuntimeError(f"Course not found for slug '{slug}'. Check the slug.")
         return els[0]["id"], els[0].get("name", slug)
 
+    def resolve_specialization(self, slug):
+        """Expand a Specialization / Professional Certificate slug into its ordered
+        member courses. Returns (spec_name, [(course_slug, course_name), ...])."""
+        fields = "name,slug,courseIds"
+        url = (f"{BASE}/api/onDemandSpecializations.v1?q=slug&slug={quote(slug)}"
+               f"&fields={quote(fields, safe=',')}&includes=courses")
+        data = self._get(url)
+        els = data.get("elements") or []
+        if not els:
+            raise RuntimeError(
+                f"Specialization/Certificate not found for slug '{slug}'. "
+                f"Use the slug after /specializations/ or /professional-certificates/.")
+        spec = els[0]
+        courses = data.get("linked", {}).get("courses.v1", [])
+        by_id = {c["id"]: (c.get("slug"), c.get("name", c.get("slug")))
+                 for c in courses}
+        ordered = []
+        for cid in spec.get("courseIds", []):
+            if cid in by_id and by_id[cid][0]:
+                ordered.append(by_id[cid])
+        if not ordered:  # fallback: whatever came back in linked
+            ordered = [(c.get("slug"), c.get("name")) for c in courses if c.get("slug")]
+        return spec.get("name", slug), ordered
+
     def get_tree(self, slug):
         """Return ordered list of (module, lesson, item) dicts."""
         fields = (
@@ -309,11 +333,13 @@ def lab_links(text):
     return sorted(found)
 
 
-def process_course(cr, slug, out_root, include):
+def process_course(cr, slug, out_root, include, course_prefix=None):
     course_id, course_name = cr.resolve_course_id(slug)
-    course_dir = os.path.join(out_root, sanitize(course_name))
+    folder = (f"{course_prefix} - {sanitize(course_name)}" if course_prefix
+              else sanitize(course_name))
+    course_dir = os.path.join(out_root, folder)
     os.makedirs(course_dir, exist_ok=True)
-    log(f"\n=== {course_name}  ({slug}) ===")
+    log(f"\n=== {('['+course_prefix+'] ') if course_prefix else ''}{course_name}  ({slug}) ===")
     tree = cr.get_tree(slug)
     log(f"{len(tree)} items across the course. Output -> {course_dir}")
 
@@ -402,6 +428,25 @@ def process_course(cr, slug, out_root, include):
         f"{counts['skipped']} non-downloadable items skipped.")
 
 
+def process_specialization(cr, slug, out_root, include, do_list=False):
+    spec_name, courses = cr.resolve_specialization(slug)
+    spec_dir = os.path.join(out_root, sanitize(spec_name))
+    log(f"\n########## Specialization: {spec_name} "
+        f"({len(courses)} courses) ##########")
+    if do_list:
+        for i, (cslug, cname) in enumerate(courses, 1):
+            log(f"  {i:02d}. {cname}  ({cslug})")
+        return
+    os.makedirs(spec_dir, exist_ok=True)
+    for i, (cslug, cname) in enumerate(courses, 1):
+        try:
+            process_course(cr, cslug, spec_dir, include, course_prefix=f"{i:02d}")
+        except SystemExit:
+            raise
+        except Exception as e:
+            log(f"!! Course {i:02d} '{cslug}' failed: {e}")
+
+
 def read_cauth(args):
     if args.cauth:
         return args.cauth.strip()
@@ -419,9 +464,14 @@ def main():
     p = argparse.ArgumentParser(
         description="Download Coursera course videos, subtitles, readings and labs "
                     "(personal offline use; you must be enrolled).")
-    p.add_argument("slugs", nargs="+",
+    p.add_argument("slugs", nargs="*",
                    help="Course slug(s). The slug is the part after /learn/ in the URL, "
                         "e.g. develop-generative-ai-applications-get-started")
+    p.add_argument("-s", "--specialization", nargs="+", default=[], metavar="SLUG",
+                   help="Specialization or Professional Certificate slug(s) — the part "
+                        "after /specializations/ or /professional-certificates/. Each is "
+                        "expanded into all its member courses, saved in a specialization "
+                        "folder with each course numbered 01, 02, ...")
     p.add_argument("--cauth", help="Your CAUTH cookie value")
     p.add_argument("--cauth-file", help="File containing only the CAUTH value")
     p.add_argument("--out", default="./coursera", help="Output directory (default ./coursera)")
@@ -439,6 +489,9 @@ def main():
     p.add_argument("--list", action="store_true",
                    help="Only list the course structure, download nothing")
     args = p.parse_args()
+
+    if not args.slugs and not args.specialization:
+        p.error("provide at least one course slug, or -s/--specialization <slug>.")
 
     # map friendly include names -> content types
     inc_map = {"video": "lecture", "reading": "supplement", "lab": "ungradedLti"}
@@ -458,6 +511,8 @@ def main():
     log(f"OK (user id {cr.user_id}).")
 
     if args.list:
+        for spec in args.specialization:
+            process_specialization(cr, spec, args.out, include, do_list=True)
         for slug in args.slugs:
             cid, cname = cr.resolve_course_id(slug)
             log(f"\n=== {cname} ({slug}) ===")
@@ -469,6 +524,14 @@ def main():
                 log(f"{n['m_idx']:02d}.{n['l_idx']:02d}.{n['i_idx']:02d} "
                     f"{mark} {n['item'].get('name')}  ({ct}){lock}")
         return
+
+    for spec in args.specialization:
+        try:
+            process_specialization(cr, spec, args.out, include)
+        except SystemExit:
+            raise
+        except Exception as e:
+            log(f"!! Specialization '{spec}' failed: {e}")
 
     for slug in args.slugs:
         try:
