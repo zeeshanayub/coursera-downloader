@@ -136,14 +136,30 @@ class Coursera:
         spec = els[0]
         courses = data.get("linked", {}).get("courses.v1", [])
         by_id = {c["id"]: (c.get("slug"), c.get("name", c.get("slug")))
-                 for c in courses}
+                 for c in courses if c.get("slug")}
         ordered = []
         for cid in spec.get("courseIds", []):
-            if cid in by_id and by_id[cid][0]:
+            if cid in by_id:
                 ordered.append(by_id[cid])
-        if not ordered:  # fallback: whatever came back in linked
+            else:
+                # Coursera sometimes returns courseIds without the linked course
+                # objects — resolve each id to its slug directly.
+                info = self._course_by_id(cid)
+                if info:
+                    ordered.append(info)
+        if not ordered:  # last-ditch fallback: whatever came back in linked
             ordered = [(c.get("slug"), c.get("name")) for c in courses if c.get("slug")]
         return spec.get("name", slug), ordered
+
+    def _course_by_id(self, course_id):
+        """Resolve a course id -> (slug, name) via the by-id course endpoint."""
+        try:
+            data = self._get(f"{BASE}/api/onDemandCourses.v1/{course_id}?fields=slug,name")
+        except Exception:
+            return None
+        el = (data.get("elements") or [data])[0]
+        s = el.get("slug")
+        return (s, el.get("name", s)) if s else None
 
     def get_tree(self, slug):
         """Return ordered list of (module, lesson, item) dicts."""
