@@ -32,7 +32,7 @@ nothing to "download."
 Requires **Python 3.11 or newer** (`yt-dlp` has dropped 3.10 and below).
 
 ```bash
-git clone https://github.com/<your-username>/coursera-downloader.git
+git clone https://github.com/zeeshanayub/coursera-downloader.git
 cd coursera-downloader
 
 python3 -m venv venv
@@ -104,12 +104,47 @@ python3 coursera_dl.py <slug> --cauth-file cauth.txt --include video --quality 7
 
 # Several courses at once, custom output folder
 python3 coursera_dl.py slug-one slug-two --cauth-file cauth.txt --out ~/Coursera
+
+# A whole Specialization / Professional Certificate (all member courses, in order)
+python3 coursera_dl.py -s ibm-rag-and-agentic-ai --cauth-file cauth.txt --out ~/Coursera
+
+# List a specialization's courses without downloading
+python3 coursera_dl.py -s ibm-rag-and-agentic-ai --cauth-file cauth.txt --list
+
+# Mix: two specializations + a standalone course in one run
+python3 coursera_dl.py -s spec-one spec-two extra-course-slug --cauth-file cauth.txt
 ```
+
+### Specializations & Professional Certificates
+
+Pass `-s` / `--specialization` with the slug from the catalog URL — the part after
+`/specializations/` or `/professional-certificates/`:
+
+```
+https://www.coursera.org/professional-certificates/ibm-rag-and-agentic-ai
+                                                    └──────── slug ───────┘
+```
+
+The tool expands it into **all its member courses, in the official order**, and saves
+them inside one specialization folder with each course numbered:
+
+```
+~/Coursera/
+└── IBM RAG and Agentic AI/
+    ├── 01 - Develop Generative AI Applications Get Started/
+    ├── 02 - Build RAG Applications Get Started/
+    ├── 03 - Vector Databases for RAG An Introduction/
+    └── ...
+```
+
+You must be **enrolled in** each course for it to download; courses you haven't
+enrolled in will report locked/forbidden items and be skipped.
 
 ### Options
 
 | Flag | Default | Meaning |
 |---|---|---|
+| `-s` / `--specialization` | — | Specialization / Professional Certificate slug(s) — downloads all member courses, numbered |
 | `--cauth` / `--cauth-file` | — | Your CAUTH cookie (required; or `COURSERA_CAUTH` env) |
 | `--out` | `./coursera` | Output directory |
 | `--quality` | `best` | `best`, or `1080p` / `720p` / `540p` / `360p` / `240p` |
@@ -194,6 +229,7 @@ All endpoints are Coursera's own internal `on-demand` API, called with your `CAU
 cookie:
 
 1. `adminUserPermissions.v1?q=my` → your user id
+2. `onDemandSpecializations.v1?q=slug&slug=<slug>&includes=courses` → ordered member courses (for `-s`)
 2. `onDemandCourses.v1?q=slug&slug=<slug>` → course id
 3. `onDemandCourseMaterials.v2` → modules → lessons → items (ordered)
 4. `onDemandLectureVideos.v1/<course>~<item>` → `sources.byResolution[res].mp4VideoUrl` + `subtitlesVtt`
